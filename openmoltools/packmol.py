@@ -17,6 +17,7 @@ tolerance %f
 filetype pdb
 output %s
 add_amber_ter
+seed %i
 
 """
 
@@ -27,7 +28,22 @@ structure %s
 end structure
 """
 
-def pack_box(pdb_filenames_or_trajectories, n_molecules_list, tolerance=2.0, box_size=None):
+SPHERE_TEMPLATE = """
+structure %s
+  number %d 
+  inside sphere 0. 0. 0. %f
+end structure
+"""
+
+FIXED_TEMPLATE = """
+structure %s
+  number %d 
+  center
+  fixed %d %d %d 0. 0. 0.
+end structure
+"""
+
+def pack_box(pdb_filenames_or_trajectories, n_molecules_list, tolerance=2.0, shape='box', size=None, seed=1, fix=False):
     """Run packmol to generate a box containing a mixture of molecules.
 
     Parameters
@@ -40,9 +56,11 @@ def pack_box(pdb_filenames_or_trajectories, n_molecules_list, tolerance=2.0, box
         The number of molecules of each mixture component.
     tolerance : float, optional, default=2.0
         The mininum spacing between molecules during packing.  In ANGSTROMS!
-    box_size : float, optional
-        The size of the box to generate.  In ANGSTROMS.
-        Default generates boxes that are very large for increased stability.
+    size : float, optional
+        The size of the box/sphere to generate. In ANGSTROMS.
+        For a box specifies the lengths of the box
+        For a sphere specifies the diameter of the sphere
+        Default generates boxes/spheres that are very large for increased stability.
         May require extra time for energy minimization and equilibration.
 
     Returns
@@ -74,19 +92,31 @@ def pack_box(pdb_filenames_or_trajectories, n_molecules_list, tolerance=2.0, box
     
     output_filename = tempfile.mktemp(suffix=".pdb")
 
-    # approximating volume to initialize  box
-    if box_size is None:
-        box_size = approximate_volume(pdb_filenames, n_molecules_list)    
+    # approximating volume to initialize box
+    if size is None:
+        size = approximate_volume(pdb_filenames, n_molecules_list)    
 
-    header = HEADER_TEMPLATE % (tolerance, output_filename)
+    if shape == 'box':
+        box_size = size
+    elif shape == 'sphere':
+        sphere_radius = float(size)/2
+
+    header = HEADER_TEMPLATE % (tolerance, output_filename, seed)
     for k in range(len(pdb_filenames)):
         filename = pdb_filenames[k]
         n_molecules = n_molecules_list[k]
-        header = header + BOX_TEMPLATE % (filename, n_molecules, box_size, box_size, box_size)
-    
+        if fix and k==0 and n_molecules==1 and shape == 'box':
+            header = header + FIXED_TEMPLATE % (filename, n_molecules, float(size)/2, float(size)/2, float(size)/2)
+        elif fix and k==0 and n_molecules==1 and shape == 'sphere':
+            header = header + FIXED_TEMPLATE % (filename, n_molecules, 0, 0, 0)
+    	elif shape == 'box':
+            header = header + BOX_TEMPLATE % (filename, n_molecules, box_size, box_size, box_size)
+	elif shape == 'sphere':
+            header = header + SPHERE_TEMPLATE % (filename, n_molecules, sphere_radius)
+
     pwd = os.getcwd()
     
-    print(header)
+    #print(header)
     
     packmol_filename = "packmol_input.txt"
     packmol_filename = tempfile.mktemp(suffix=".txt")
@@ -95,7 +125,7 @@ def pack_box(pdb_filenames_or_trajectories, n_molecules_list, tolerance=2.0, box
     file_handle.write(header)
     file_handle.close()
     
-    print(header)
+    #print(header)
 
     os.system("%s < %s" % (PACKMOL_PATH, packmol_filename)) 
 
@@ -121,7 +151,8 @@ def pack_box(pdb_filenames_or_trajectories, n_molecules_list, tolerance=2.0, box
     bonds = np.array(bonds)
     trj.top = md.Topology.from_dataframe(top, bonds)
     
-    trj.unitcell_vectors = np.array([np.eye(3)]) * box_size / 10.
+    if shape == 'box':
+        trj.unitcell_vectors = np.array([np.eye(3)]) * box_size / 10.
     
     return trj
 
