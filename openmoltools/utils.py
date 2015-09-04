@@ -309,6 +309,16 @@ def get_data_filename(relative_path):
     return fn
 
 
+def convert_molecule(init_molecule_fn, final_molecule_fn):
+   """Convert molecule from one format to another using openbabel"""
+   import pybel
+   
+   input_format = init_molecule_fn.split('.')[-1]
+   output_format = final_molecule_fn.split('.')[-1]
+
+   pybel_mol = pybel.readfile(input_format, init_molecule_fn).next()
+   pybel_mol.write(output_format, final_molecule_fn, overwrite=True)
+  
 
 def smiles_to_mdtraj_ffxml(smiles_strings, base_molecule_name="lig"):
     """Generate an MDTraj object from a smiles string.
