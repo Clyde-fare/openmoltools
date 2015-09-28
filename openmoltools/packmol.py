@@ -127,7 +127,7 @@ def pack_box(pdb_filenames_or_trajectories, n_molecules_list, tolerance=2.0, sha
     
     #print(header)
 
-    os.system("%s < %s" % (PACKMOL_PATH, packmol_filename)) 
+    os.system("%s < %s >/dev/null" % (PACKMOL_PATH, packmol_filename)) 
 
     trj = md.load(output_filename)
 
